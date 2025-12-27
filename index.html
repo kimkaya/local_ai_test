@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 키오스크</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI 키오스크</h1>
+            <p>챗봇 대화 | 카메라 포즈 인식 | AI 이미지 생성</p>
+            <div id="service-status">
+                <div class="status-item">서비스 확인 중...</div>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="chat">💬 챗봇</button>
+            <button class="tab-btn" data-tab="camera">📷 카메라</button>
+            <button class="tab-btn" data-tab="generate">🎨 이미지 생성</button>
+        </div>
+
+        <!-- 챗봇 탭 -->
+        <div id="chat-tab" class="tab-content active">
+            <h2>AI 챗봇 (Phi-3 Mini)</h2>
+            <div id="chat-messages">
+                <div class="chat-message bot">안녕하세요! 무엇을 도와드릴까요?</div>
+            </div>
+            <div class="chat-input-group">
+                <input type="text" id="chat-input" placeholder="메시지를 입력하세요...">
+                <button id="chat-send" class="primary">전송</button>
+            </div>
+        </div>
+
+        <!-- 카메라 탭 -->
+        <div id="camera-tab" class="tab-content">
+            <h2>카메라 포즈 인식</h2>
+
+            <div class="camera-controls">
+                <button id="camera-start" class="primary">카메라 시작</button>
+                <button id="camera-stop" class="danger" disabled>카메라 중지</button>
+                <button id="camera-capture" class="secondary" disabled>사진 촬영</button>
+            </div>
+
+            <div id="camera-status" class="message"></div>
+
+            <video id="camera-preview" autoplay playsinline></video>
+            <canvas id="camera-canvas"></canvas>
+
+            <div id="captured-image">
+                <p style="color: #999; text-align: center;">촬영된 이미지가 여기에 표시됩니다</p>
+            </div>
+        </div>
+
+        <!-- 이미지 생성 탭 -->
+        <div id="generate-tab" class="tab-content">
+            <h2>AI 이미지 생성</h2>
+
+            <div class="prompt-group">
+                <label for="prompt-input" style="display: block; margin-bottom: 10px; font-weight: 600; color: #333;">
+                    프롬프트 입력 (영어 권장)
+                </label>
+                <input
+                    type="text"
+                    id="prompt-input"
+                    placeholder="예: a beautiful anime girl, standing pose, detailed, high quality">
+            </div>
+
+            <div class="generation-controls">
+                <button id="generate-simple" class="primary">텍스트로 이미지 생성</button>
+                <button id="generate-pose" class="primary">포즈 기반 이미지 생성 (카메라 필요)</button>
+            </div>
+
+            <div id="generation-status" class="message"></div>
+
+            <div id="generation-result">
+                <p style="color: #999;">생성된 이미지가 여기에 표시됩니다</p>
+            </div>
+
+            <div style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 10px;">
+                <h3 style="margin-bottom: 15px; color: #667eea;">사용 가이드</h3>
+                <ul style="line-height: 1.8; color: #666;">
+                    <li><strong>텍스트로 이미지 생성:</strong> 프롬프트만 입력하면 AI가 이미지를 생성합니다</li>
+                    <li><strong>포즈 기반 이미지 생성:</strong>
+                        <ol style="margin-left: 20px; margin-top: 5px;">
+                            <li>카메라 탭에서 사진을 촬영하세요</li>
+                            <li>이 탭으로 돌아와서 프롬프트를 입력하세요</li>
+                            <li>"포즈 기반 이미지 생성" 버튼을 클릭하세요</li>
+                        </ol>
+                    </li>
+                    <li><strong>프롬프트 예시:</strong>
+                        <ul style="margin-left: 20px; margin-top: 5px;">
+                            <li>a professional businessman in suit, office background</li>
+                            <li>a cute cat wearing glasses, cartoon style</li>
+                            <li>a superhero in action pose, dynamic lighting</li>
+                        </ul>
+                    </li>
+                    <li><strong>생성 시간:</strong> 단순 생성 10-30초, 포즈 기반 20-40초</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/kiosk.js"></script>
+</body>
+</html>

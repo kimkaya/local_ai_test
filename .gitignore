@@ -1,0 +1,36 @@
+# Python 가상환경
+venv/
+*.pyc
+__pycache__/
+
+# Stable Diffusion WebUI
+sd-webui/
+
+# 업로드 및 출력 파일
+uploads/*
+!uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# 임시 파일
+*.tmp
+*.log
+
+# OS 관련
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 모델 파일 (너무 큼)
+*.safetensors
+*.ckpt
+*.pth
+*.bin
+*.pt
