@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/Users/sanik/AppData/Local/Microsoft/WindowsApps/python --version)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
