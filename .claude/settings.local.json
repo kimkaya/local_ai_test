@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(/c/Users/sanik/AppData/Local/Microsoft/WindowsApps/python --version)"
+      "Bash(/c/Users/sanik/AppData/Local/Microsoft/WindowsApps/python --version)",
+      "Bash(.\\venv\\Scripts\\python.exe -m pip:*)",
+      "Bash(./venv/Scripts/python.exe -m pip:*)",
+      "Bash(ollama:*)",
+      "Bash(test:*)",
+      "Bash(php:*)",
+      "Bash(curl:*)",
+      "Bash(git --version:*)",
+      "Bash(git clone:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

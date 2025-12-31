@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 class SDImageGenerator:
-    def __init__(self, api_url="http://localhost:7860"):
+    def __init__(self, api_url="http://localhost:7861"):
         self.api_url = api_url
         self.txt2img_endpoint = f"{api_url}/sdapi/v1/txt2img"
         self.controlnet_endpoint = f"{api_url}/controlnet/txt2img"
@@ -28,35 +28,30 @@ class SDImageGenerator:
             # 스켈레톤 이미지를 base64로 인코딩
             skeleton_base64 = self.encode_image_to_base64(skeleton_path)
 
+            # ControlNet temporarily disabled - needs model installation
             payload = {
-                "prompt": prompt,
+                "prompt": prompt + " (full body, standing pose)",  # Add pose hint to prompt
                 "negative_prompt": negative_prompt or "bad quality, blurry, distorted, ugly, low resolution",
                 "steps": steps,
-                "cfg_scale": 2.0,  # SD Turbo는 낮은 CFG 권장
+                "cfg_scale": 2.0,
                 "width": 512,
                 "height": 512,
-                "sampler_name": "DPM++ SDE",  # Turbo 모델에 적합
-                "alwayson_scripts": {
-                    "controlnet": {
-                        "args": [
-                            {
-                                "enabled": True,
-                                "module": "none",  # OpenPose 전처리 건너뛰기 (이미 처리됨)
-                                "model": "control_v11p_sd15_openpose [cab727d4]",
-                                "weight": 1.0,
-                                "input_image": skeleton_base64,
-                                "resize_mode": 1,
-                                "lowvram": False,
-                                "processor_res": 512,
-                                "guidance_start": 0.0,
-                                "guidance_end": 1.0,
-                                "control_mode": 0,
-                                "pixel_perfect": True
-                            }
-                        ]
-                    }
-                }
+                "sampler_name": "Euler"  # More compatible sampler
             }
+
+            # TODO: Re-enable ControlNet after installing control_v11p_sd15_openpose model
+            # "alwayson_scripts": {
+            #     "controlnet": {
+            #         "args": [{
+            #             "enabled": True,
+            #             "module": "none",
+            #             "model": "control_v11p_sd15_openpose [cab727d4]",
+            #             "weight": 1.0,
+            #             "input_image": skeleton_base64,
+            #             ...
+            #         }]
+            #     }
+            # }
 
             # API 호출
             response = requests.post(self.txt2img_endpoint, json=payload, timeout=120)
@@ -104,7 +99,7 @@ class SDImageGenerator:
                 "cfg_scale": 2.0,
                 "width": 512,
                 "height": 512,
-                "sampler_name": "DPM++ SDE"
+                "sampler_name": "Euler"  # More compatible sampler
             }
 
             response = requests.post(self.txt2img_endpoint, json=payload, timeout=120)
@@ -173,7 +168,8 @@ def main():
     else:
         result = {"success": False, "error": "유효하지 않은 모드"}
 
-    print(json.dumps(result, ensure_ascii=False))
+    # Use ensure_ascii=True to avoid encoding issues with PHP exec()
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":

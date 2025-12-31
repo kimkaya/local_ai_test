@@ -6,6 +6,10 @@
  * - 카메라 포즈 감지 (MediaPipe)
  */
 
+// 실행 시간 제한 늘리기 (포즈 감지 및 이미지 생성은 시간이 오래 걸림)
+set_time_limit(300); // 5분
+ini_set('max_execution_time', '300');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -19,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // 설정
 define('OLLAMA_API', 'http://localhost:11434');
-define('SD_API', 'http://localhost:7860');
+define('SD_API', 'http://localhost:7861');
 define('PYTHON_PATH', 'C:\\xampp\\htdocs\\ai_test_sec\\venv\\Scripts\\python.exe');
 define('SCRIPT_PATH', 'C:\\xampp\\htdocs\\ai_test_sec\\scripts');
 define('UPLOAD_PATH', 'C:\\xampp\\htdocs\\ai_test_sec\\uploads');
@@ -96,14 +100,36 @@ function detect_pose($image_data) {
 
     // Python 스크립트 실행
     $script = SCRIPT_PATH . '\\camera_detect.py';
-    $command = '"' . PYTHON_PATH . '" "' . $script . '" webcam "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
+    $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
 
     exec($command, $output, $return_var);
 
-    $output_str = implode("\n", $output);
+    // Filter out non-JSON lines (like TensorFlow INFO messages)
+    $json_lines = [];
+    foreach ($output as $line) {
+        $trimmed = trim($line);
+        if (!empty($trimmed) && strlen($trimmed) > 0) {
+            $first_char = $trimmed[0];
+            if ($first_char === '{' || $first_char === '[') {
+                $json_lines[] = $line;
+            }
+        }
+    }
+
+    $output_str = implode("\n", $json_lines);
 
     // JSON 파싱
     $result = json_decode($output_str, true);
+
+    // JSON 파싱 실패 시 원본 출력 반환
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return [
+            'success' => false,
+            'error' => "JSON 파싱 실패",
+            'raw_output' => $output_str,
+            'command' => $command
+        ];
+    }
 
     if ($result && isset($result['success']) && $result['success']) {
         return [
@@ -135,8 +161,30 @@ function generate_image($prompt, $skeleton_path = null, $mode = 'simple') {
 
     exec($command, $output, $return_var);
 
-    $output_str = implode("\n", $output);
+    // Filter out non-JSON lines (like TensorFlow INFO messages)
+    $json_lines = [];
+    foreach ($output as $line) {
+        $trimmed = trim($line);
+        if (!empty($trimmed) && strlen($trimmed) > 0) {
+            $first_char = $trimmed[0];
+            if ($first_char === '{' || $first_char === '[') {
+                $json_lines[] = $line;
+            }
+        }
+    }
+
+    $output_str = implode("\n", $json_lines);
     $result = json_decode($output_str, true);
+
+    // JSON 파싱 실패 시 원본 출력 반환
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return [
+            'success' => false,
+            'error' => "JSON 파싱 실패",
+            'raw_output' => $output_str,
+            'command' => $command
+        ];
+    }
 
     if ($result && isset($result['success']) && $result['success']) {
         return [

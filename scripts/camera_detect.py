@@ -162,7 +162,8 @@ def main():
     else:
         result = {"success": False, "error": "유효하지 않은 모드"}
 
-    print(json.dumps(result, ensure_ascii=False))
+    # Use ensure_ascii=True to avoid encoding issues with PHP exec()
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":

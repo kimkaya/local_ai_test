@@ -267,9 +267,21 @@ class AIKiosk {
                 body: formData
             });
 
-            const data = await response.json();
+            // 응답 텍스트 먼저 확인
+            const responseText = await response.text();
+            console.log('Server response:', responseText);
 
             this.hideLoading('generation-result');
+
+            // JSON 파싱 시도
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                this.showMessage('generation-status', `서버 응답 오류: ${responseText.substring(0, 200)}`, 'error');
+                return;
+            }
 
             if (data.success) {
                 document.getElementById('generation-result').innerHTML = `
@@ -286,10 +298,17 @@ class AIKiosk {
                 `;
                 this.showMessage('generation-status', '포즈 기반 이미지 생성 완료', 'success');
             } else {
-                this.showMessage('generation-status', `오류: ${data.error}`, 'error');
+                // 상세 에러 메시지 표시
+                let errorMsg = data.error || '알 수 없는 오류';
+                if (data.raw_output) {
+                    console.error('Python output:', data.raw_output);
+                    errorMsg += `\n\n상세: ${data.raw_output}`;
+                }
+                this.showMessage('generation-status', `오류: ${errorMsg}`, 'error');
             }
         } catch (error) {
             this.hideLoading('generation-result');
+            console.error('Full error:', error);
             this.showMessage('generation-status', `오류: ${error.message}`, 'error');
         }
     }
