@@ -1,0 +1,18 @@
+<?php
+// Direct test of detect_pose function
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Include the service file
+$_SERVER['REQUEST_METHOD'] = 'GET'; // Prevent OPTIONS handler
+require_once 'api/ai_service.php';
+
+echo "Testing detect_pose function...\n\n";
+
+$test_image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/VVAAA=';
+
+$result = detect_pose($test_image);
+
+echo "Result:\n";
+print_r($result);
+?>

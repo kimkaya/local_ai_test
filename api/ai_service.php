@@ -80,9 +80,9 @@ function chat_with_ollama($message, $model = 'phi3:mini') {
 }
 
 /**
- * 카메라 포즈 감지
+ * 카메라 포즈 감지 (고도화 버전)
  */
-function detect_pose($image_data) {
+function detect_pose($image_data, $advanced = true, $draw_hands = true, $draw_face = true) {
     $timestamp = time();
     $temp_image = UPLOAD_PATH . "/webcam_$timestamp.jpg";
     $skeleton_image = OUTPUT_PATH . "/skeleton_$timestamp.png";
@@ -98,9 +98,24 @@ function detect_pose($image_data) {
 
     file_put_contents($temp_image, $decoded);
 
-    // Python 스크립트 실행
-    $script = SCRIPT_PATH . '\\camera_detect.py';
-    $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
+    // Python 스크립트 선택 (고도화 버전 또는 기본 버전)
+    $script = $advanced ?
+        SCRIPT_PATH . '\\camera_detect_advanced.py' :
+        SCRIPT_PATH . '\\camera_detect.py';
+
+    // 고도화 버전 옵션
+    $options = json_encode([
+        'draw_hands' => $draw_hands,
+        'draw_face' => $draw_face,
+        'colorful' => false,
+        'min_quality' => 30.0
+    ]);
+
+    if ($advanced) {
+        $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" \'' . addslashes($options) . '\' 2>&1';
+    } else {
+        $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
+    }
 
     exec($command, $output, $return_var);
 
@@ -202,9 +217,9 @@ function generate_image($prompt, $skeleton_path = null, $mode = 'simple') {
 /**
  * 포즈 기반 이미지 생성 (통합)
  */
-function generate_pose_image($image_data, $prompt) {
-    // 1. 포즈 감지
-    $pose_result = detect_pose($image_data);
+function generate_pose_image($image_data, $prompt, $advanced = true, $draw_hands = true, $draw_face = true) {
+    // 1. 포즈 감지 (고도화 버전)
+    $pose_result = detect_pose($image_data, $advanced, $draw_hands, $draw_face);
 
     if (!$pose_result['success']) {
         return $pose_result;
@@ -243,12 +258,16 @@ switch ($action) {
 
     case 'detect_pose':
         $image_data = $_POST['image'] ?? '';
+        $advanced = $_POST['advanced'] ?? true;
+        $draw_hands = $_POST['draw_hands'] ?? true;
+        $draw_face = $_POST['draw_face'] ?? true;
+
         if (empty($image_data)) {
             echo json_encode(['success' => false, 'error' => '이미지 데이터가 비어있습니다']);
             exit;
         }
 
-        $result = detect_pose($image_data);
+        $result = detect_pose($image_data, $advanced, $draw_hands, $draw_face);
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         break;
 
@@ -269,13 +288,16 @@ switch ($action) {
     case 'pose_image':
         $image_data = $_POST['image'] ?? '';
         $prompt = $_POST['prompt'] ?? '';
+        $advanced = $_POST['advanced'] ?? true;
+        $draw_hands = $_POST['draw_hands'] ?? true;
+        $draw_face = $_POST['draw_face'] ?? true;
 
         if (empty($image_data) || empty($prompt)) {
             echo json_encode(['success' => false, 'error' => '이미지 또는 프롬프트가 비어있습니다']);
             exit;
         }
 
-        $result = generate_pose_image($image_data, $prompt);
+        $result = generate_pose_image($image_data, $prompt, $advanced, $draw_hands, $draw_face);
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         break;
 

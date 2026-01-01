@@ -20,7 +20,7 @@ class SDImageGenerator:
         with open(image_path, 'rb') as f:
             return base64.b64encode(f.read()).decode('utf-8')
 
-    def generate_with_controlnet(self, prompt, skeleton_path, output_path, negative_prompt="", steps=8):
+    def generate_with_controlnet(self, prompt, skeleton_path, output_path, negative_prompt="", steps=4):
         """
         ControlNet OpenPose를 사용하여 이미지 생성
         """
@@ -54,7 +54,7 @@ class SDImageGenerator:
             # }
 
             # API 호출
-            response = requests.post(self.txt2img_endpoint, json=payload, timeout=120)
+            response = requests.post(self.txt2img_endpoint, json=payload, timeout=300)
             response.raise_for_status()
 
             result = response.json()
@@ -87,7 +87,7 @@ class SDImageGenerator:
                 "error": f"오류 발생: {str(e)}"
             }
 
-    def generate_simple(self, prompt, output_path, negative_prompt="", steps=8):
+    def generate_simple(self, prompt, output_path, negative_prompt="", steps=4):
         """
         ControlNet 없이 단순 텍스트→이미지 생성
         """
@@ -102,7 +102,7 @@ class SDImageGenerator:
                 "sampler_name": "Euler"  # More compatible sampler
             }
 
-            response = requests.post(self.txt2img_endpoint, json=payload, timeout=120)
+            response = requests.post(self.txt2img_endpoint, json=payload, timeout=300)
             response.raise_for_status()
 
             result = response.json()
