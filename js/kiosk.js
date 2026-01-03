@@ -13,11 +13,18 @@ class AIKiosk {
         this.currentTab = 'chat';
         this.capturedImage = null;
 
+        // 음성 인식 관련
+        this.recognition = null;
+        this.isListening = false;
+        this.synthesis = window.speechSynthesis;
+        this.isSpeaking = false;
+
         this.init();
     }
 
     init() {
         this.setupEventListeners();
+        this.initVoiceRecognition();
         this.checkHealth();
         this.switchTab('chat');
     }
@@ -45,6 +52,10 @@ class AIKiosk {
         // 이미지 생성
         document.getElementById('generate-simple').addEventListener('click', () => this.generateSimpleImage());
         document.getElementById('generate-pose').addEventListener('click', () => this.generatePoseImage());
+
+        // 음성 제어
+        document.getElementById('voice-input-btn').addEventListener('click', () => this.toggleVoiceInput());
+        document.getElementById('voice-output-btn').addEventListener('click', () => this.toggleVoiceOutput());
     }
 
     switchTab(tab) {
@@ -126,6 +137,8 @@ class AIKiosk {
 
             if (data.success) {
                 this.addChatMessage('bot', data.message);
+                // 음성 출력이 활성화되어 있으면 응답을 읽어줌
+                this.speakText(data.message);
             } else {
                 this.addChatMessage('bot', `오류: ${data.error}`);
             }
@@ -142,6 +155,183 @@ class AIKiosk {
         messageDiv.textContent = message;
         messagesDiv.appendChild(messageDiv);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // === 음성 인식/합성 기능 ===
+
+    initVoiceRecognition() {
+        // Web Speech API 지원 확인
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            console.warn('음성 인식이 지원되지 않는 브라우저입니다.');
+            return;
+        }
+
+        this.recognition = new SpeechRecognition();
+        this.recognition.lang = 'ko-KR'; // 한국어 설정
+        this.recognition.continuous = false; // 연속 인식 비활성화
+        this.recognition.interimResults = false; // 중간 결과 비활성화
+
+        // 음성 인식 시작 이벤트
+        this.recognition.onstart = () => {
+            this.isListening = true;
+            this.updateVoiceInputButton();
+            console.log('음성 인식 시작');
+        };
+
+        // 음성 인식 결과
+        this.recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            console.log('인식된 텍스트:', transcript);
+
+            // 채팅 입력창에 텍스트 설정 및 전송
+            const input = document.getElementById('chat-input');
+            input.value = transcript;
+            this.sendChat();
+        };
+
+        // 음성 인식 종료
+        this.recognition.onend = () => {
+            this.isListening = false;
+            this.updateVoiceInputButton();
+            console.log('음성 인식 종료');
+        };
+
+        // 에러 처리
+        this.recognition.onerror = (event) => {
+            console.error('음성 인식 오류:', event.error);
+            this.isListening = false;
+            this.updateVoiceInputButton();
+
+            let errorMsg = '음성 인식 오류가 발생했습니다.';
+            if (event.error === 'no-speech') {
+                errorMsg = '음성이 감지되지 않았습니다. 다시 시도해주세요.';
+            } else if (event.error === 'audio-capture') {
+                errorMsg = '마이크에 접근할 수 없습니다.';
+            } else if (event.error === 'not-allowed') {
+                errorMsg = '마이크 권한이 거부되었습니다.';
+            }
+
+            this.addChatMessage('bot', errorMsg);
+        };
+    }
+
+    toggleVoiceInput() {
+        if (!this.recognition) {
+            alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
+            return;
+        }
+
+        if (this.isListening) {
+            this.recognition.stop();
+        } else {
+            this.recognition.start();
+        }
+    }
+
+    updateVoiceInputButton() {
+        const btn = document.getElementById('voice-input-btn');
+        if (this.isListening) {
+            btn.textContent = '🎤 음성 인식 중...';
+            btn.classList.add('listening');
+        } else {
+            btn.textContent = '🎤 음성 입력';
+            btn.classList.remove('listening');
+        }
+    }
+
+    toggleVoiceOutput() {
+        const btn = document.getElementById('voice-output-btn');
+
+        // 현재 재생 중인 음성이 있으면 중지
+        if (this.synthesis.speaking) {
+            this.synthesis.cancel();
+        }
+
+        // 음성 출력 활성화 상태 토글
+        this.isSpeaking = !this.isSpeaking;
+
+        if (this.isSpeaking) {
+            btn.textContent = '🔊 음성 출력 ON';
+            btn.classList.add('speaking');
+        } else {
+            btn.textContent = '🔊 음성 출력';
+            btn.classList.remove('speaking');
+        }
+    }
+
+    async speakText(text) {
+        // 음성 출력이 비활성화되어 있으면 실행하지 않음
+        if (!this.isSpeaking) return;
+
+        try {
+            // 로컬 TTS API 호출
+            const formData = new FormData();
+            formData.append('action', 'tts');
+            formData.append('text', text);
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.audio_url) {
+                // 오디오 파일 재생
+                const audio = new Audio(data.audio_url);
+
+                audio.onplay = () => {
+                    console.log('음성 출력 시작:', text);
+                };
+
+                audio.onended = () => {
+                    console.log('음성 출력 완료');
+                };
+
+                audio.onerror = (event) => {
+                    console.error('음성 재생 오류:', event);
+                    // 오류 시 Web Speech API로 폴백
+                    this.speakTextFallback(text);
+                };
+
+                await audio.play();
+            } else {
+                // TTS API 실패 시 Web Speech API로 폴백
+                console.warn('TTS API 실패, Web Speech API 사용:', data.error);
+                this.speakTextFallback(text);
+            }
+        } catch (error) {
+            console.error('TTS 오류:', error);
+            // 오류 시 Web Speech API로 폴백
+            this.speakTextFallback(text);
+        }
+    }
+
+    speakTextFallback(text) {
+        // Web Speech API를 사용한 폴백
+        this.synthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ko-KR';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        utterance.onstart = () => {
+            console.log('Web Speech API 음성 출력 시작');
+        };
+
+        utterance.onend = () => {
+            console.log('Web Speech API 음성 출력 완료');
+        };
+
+        utterance.onerror = (event) => {
+            console.error('Web Speech API 오류:', event.error);
+        };
+
+        this.synthesis.speak(utterance);
     }
 
     // === 카메라 기능 ===

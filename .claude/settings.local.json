@@ -14,7 +14,8 @@
       "Bash(git fetch:*)",
       "Bash(git rev-parse:*)",
       "Bash(./venv/Scripts/python.exe:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(.venvScriptspython.exe -m pip list)"
     ],
     "deny": [],
     "ask": []

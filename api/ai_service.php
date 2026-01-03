@@ -241,6 +241,45 @@ function generate_pose_image($image_data, $prompt, $advanced = true, $draw_hands
     ];
 }
 
+/**
+ * TTS (Text-to-Speech) - 텍스트를 음성으로 변환
+ */
+function text_to_speech($text) {
+    $timestamp = time() . '_' . rand(1000, 9999);
+    $output_file = "tts_$timestamp.mp3";
+
+    $script = SCRIPT_PATH . '\\tts_service.py';
+    $command = '"' . PYTHON_PATH . '" "' . $script . '" "' . addslashes($text) . '" "' . $output_file . '" 2>&1';
+
+    exec($command, $output, $return_var);
+
+    // JSON 라인만 필터링
+    $json_lines = [];
+    foreach ($output as $line) {
+        $trimmed = trim($line);
+        if (!empty($trimmed) && strlen($trimmed) > 0) {
+            $first_char = $trimmed[0];
+            if ($first_char === '{' || $first_char === '[') {
+                $json_lines[] = $line;
+            }
+        }
+    }
+
+    $output_str = implode("\n", $json_lines);
+    $result = json_decode($output_str, true);
+
+    // JSON 파싱 실패 시
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return [
+            'success' => false,
+            'error' => "TTS 서비스 오류",
+            'raw_output' => $output_str
+        ];
+    }
+
+    return $result;
+}
+
 // API 라우팅
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
@@ -301,6 +340,18 @@ switch ($action) {
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'tts':
+        $text = $_POST['text'] ?? '';
+
+        if (empty($text)) {
+            echo json_encode(['success' => false, 'error' => '텍스트가 비어있습니다']);
+            exit;
+        }
+
+        $result = text_to_speech($text);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'health':
         // 헬스 체크
         $ollama_ok = @file_get_contents(OLLAMA_API . '/api/tags') !== false;
@@ -320,7 +371,7 @@ switch ($action) {
         echo json_encode([
             'success' => false,
             'error' => '유효하지 않은 액션',
-            'available_actions' => ['chat', 'detect_pose', 'generate_image', 'pose_image', 'health']
+            'available_actions' => ['chat', 'detect_pose', 'generate_image', 'pose_image', 'tts', 'health']
         ]);
         break;
 }

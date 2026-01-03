@@ -100,6 +100,52 @@ header p {
 }
 
 /* 챗봇 */
+.voice-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.voice-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.voice-btn:hover {
+    background: rgba(102, 126, 234, 0.1);
+    transform: translateY(-2px);
+}
+
+.voice-btn.listening {
+    background: #f44336;
+    color: white;
+    border-color: #f44336;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.voice-btn.speaking {
+    background: #4caf50;
+    color: white;
+    border-color: #4caf50;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
 #chat-messages {
     height: 400px;
     overflow-y: auto;
@@ -333,6 +379,10 @@ button.danger:hover:not(:disabled) {
     }
 
     .chat-input-group {
+        flex-direction: column;
+    }
+
+    .voice-controls {
         flex-direction: column;
     }
 

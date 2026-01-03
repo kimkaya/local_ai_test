@@ -30,11 +30,17 @@
         <!-- 챗봇 탭 -->
         <div id="chat-tab" class="tab-content active">
             <h2>AI 챗봇 (Phi-3 Mini)</h2>
+
+            <div class="voice-controls">
+                <button id="voice-input-btn" class="voice-btn">🎤 음성 입력</button>
+                <button id="voice-output-btn" class="voice-btn">🔊 음성 출력</button>
+            </div>
+
             <div id="chat-messages">
                 <div class="chat-message bot">안녕하세요! 무엇을 도와드릴까요?</div>
             </div>
             <div class="chat-input-group">
-                <input type="text" id="chat-input" placeholder="메시지를 입력하세요...">
+                <input type="text" id="chat-input" placeholder="메시지를 입력하세요 (또는 음성 입력 버튼 클릭)...">
                 <button id="chat-send" class="primary">전송</button>
             </div>
         </div>
