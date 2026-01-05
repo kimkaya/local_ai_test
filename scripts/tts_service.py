@@ -49,10 +49,10 @@ class TTSService:
 
             # ElevenLabs 음성 합성
             # 'Rachel' 음성 사용 (감정 표현 우수, 다국어 지원)
-            audio = self.client.generate(
+            audio = self.client.text_to_speech.convert(
+                voice_id="21m00Tcm4TlvDq8ikWAM",  # Rachel 음성 ID
                 text=text,
-                voice="Rachel",  # 또는 다른 음성 ID
-                model="eleven_multilingual_v2",  # 다국어 모델 (한국어 지원)
+                model_id="eleven_multilingual_v2",  # 다국어 모델 (한국어 지원)
                 voice_settings=VoiceSettings(
                     stability=0.5,  # 안정성 (0.0-1.0)
                     similarity_boost=0.75,  # 유사성 강화
@@ -64,7 +64,10 @@ class TTSService:
             # 오디오를 바이트로 변환하여 저장
             with open(output_path, 'wb') as f:
                 for chunk in audio:
-                    f.write(chunk)
+                    if isinstance(chunk, bytes):
+                        f.write(chunk)
+                    else:
+                        f.write(chunk)
 
             return True, "음성 생성 완료", str(output_path)
         except Exception as e:

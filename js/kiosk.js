@@ -271,12 +271,20 @@ class AIKiosk {
             formData.append('action', 'tts');
             formData.append('text', text);
 
+            console.log('TTS 요청:', text);
+
             const response = await fetch(API_URL, {
                 method: 'POST',
                 body: formData
             });
 
-            const data = await response.json();
+            console.log('TTS 응답 상태:', response.status, response.statusText);
+
+            const responseText = await response.text();
+            console.log('TTS 응답 내용 (처음 200자):', responseText.substring(0, 200));
+
+            const data = JSON.parse(responseText);
+            console.log('TTS 파싱 성공:', data);
 
             if (data.success && data.audio_url) {
                 // 오디오 파일 재생
