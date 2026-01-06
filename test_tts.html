@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TTS 테스트</title>
+</head>
+<body>
+    <h1>TTS 직접 테스트</h1>
+    <button onclick="testTTS()">TTS 테스트</button>
+    <div id="result"></div>
+    <audio id="audio" controls></audio>
+
+    <script>
+        async function testTTS() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '요청 중...';
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'tts');
+                formData.append('text', '안녕하세요, 테스트입니다');
+
+                console.log('TTS 요청 시작');
+
+                const response = await fetch('/ai_test_sec/api/ai_service.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('응답 상태:', response.status);
+
+                const responseText = await response.text();
+                console.log('응답 내용:', responseText);
+
+                resultDiv.innerHTML = '<pre>' + responseText + '</pre>';
+
+                const data = JSON.parse(responseText);
+
+                if (data.success && data.audio_url) {
+                    const audio = document.getElementById('audio');
+                    audio.src = data.audio_url;
+                    audio.play();
+                    resultDiv.innerHTML += '<br>음성 재생 중!';
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                resultDiv.innerHTML = '오류: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

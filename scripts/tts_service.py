@@ -100,7 +100,8 @@ def main():
     else:
         result["error"] = message
 
-    print(json.dumps(result, ensure_ascii=False))
+    # ASCII로 출력 (인코딩 문제 방지)
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":

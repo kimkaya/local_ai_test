@@ -245,13 +245,22 @@ function generate_pose_image($image_data, $prompt, $advanced = true, $draw_hands
  * TTS (Text-to-Speech) - 텍스트를 음성으로 변환
  */
 function text_to_speech($text) {
+    error_log("text_to_speech 함수 시작");
     $timestamp = time() . '_' . rand(1000, 9999);
     $output_file = "tts_$timestamp.mp3";
 
     $script = SCRIPT_PATH . '\\tts_service.py';
     $command = '"' . PYTHON_PATH . '" "' . $script . '" "' . addslashes($text) . '" "' . $output_file . '" 2>&1';
 
+    error_log("TTS 명령어: " . $command);
+
+    $start_time = microtime(true);
     exec($command, $output, $return_var);
+    $elapsed = microtime(true) - $start_time;
+
+    error_log("TTS 실행 완료 (소요시간: " . round($elapsed, 2) . "초)");
+    error_log("TTS Python 출력 라인 수: " . count($output));
+    error_log("TTS Python 전체 출력: " . implode("\n", $output));
 
     // JSON 라인만 필터링
     $json_lines = [];
@@ -266,10 +275,12 @@ function text_to_speech($text) {
     }
 
     $output_str = implode("\n", $json_lines);
+    error_log("TTS JSON 문자열: " . $output_str);
     $result = json_decode($output_str, true);
 
     // JSON 파싱 실패 시
     if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log("TTS JSON 파싱 실패: " . json_last_error_msg());
         return [
             'success' => false,
             'error' => "TTS 서비스 오류",
@@ -277,6 +288,7 @@ function text_to_speech($text) {
         ];
     }
 
+    error_log("TTS 성공, 결과 반환");
     return $result;
 }
 
@@ -341,14 +353,18 @@ switch ($action) {
         break;
 
     case 'tts':
+        error_log("TTS 요청 시작");
         $text = $_POST['text'] ?? '';
 
         if (empty($text)) {
+            error_log("TTS 오류: 텍스트 비어있음");
             echo json_encode(['success' => false, 'error' => '텍스트가 비어있습니다']);
             exit;
         }
 
+        error_log("TTS 텍스트: " . $text);
         $result = text_to_speech($text);
+        error_log("TTS 결과: " . json_encode($result));
         echo json_encode($result, JSON_UNESCAPED_UNICODE);
         break;
 
