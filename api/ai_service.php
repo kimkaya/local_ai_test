@@ -34,6 +34,44 @@ if (!file_exists(UPLOAD_PATH)) mkdir(UPLOAD_PATH, 0777, true);
 if (!file_exists(OUTPUT_PATH)) mkdir(OUTPUT_PATH, 0777, true);
 
 /**
+ * 파일 트랜잭션 클래스
+ * 생성된 파일들을 추적하고 에러 발생 시 롤백
+ */
+class FileTransaction {
+    private $files = [];
+    private $committed = false;
+
+    public function addFile($filepath) {
+        if (file_exists($filepath)) {
+            $this->files[] = $filepath;
+        }
+    }
+
+    public function commit() {
+        $this->committed = true;
+        $this->files = [];
+    }
+
+    public function rollback() {
+        if (!$this->committed) {
+            foreach ($this->files as $file) {
+                if (file_exists($file)) {
+                    @unlink($file);
+                }
+            }
+        }
+        $this->files = [];
+    }
+
+    public function __destruct() {
+        // 객체 소멸 시 자동 롤백 (commit되지 않은 경우)
+        if (!$this->committed) {
+            $this->rollback();
+        }
+    }
+}
+
+/**
  * Ollama API 호출 - 챗봇
  */
 function chat_with_ollama($message, $model = 'phi3:mini') {
@@ -82,135 +120,172 @@ function chat_with_ollama($message, $model = 'phi3:mini') {
 /**
  * 카메라 포즈 감지 (고도화 버전)
  */
-function detect_pose($image_data, $advanced = true, $draw_hands = true, $draw_face = true) {
-    $timestamp = time();
-    $temp_image = UPLOAD_PATH . "/webcam_$timestamp.jpg";
-    $skeleton_image = OUTPUT_PATH . "/skeleton_$timestamp.png";
+function detect_pose($image_data, $advanced = true, $draw_hands = true, $draw_face = true, $external_transaction = null) {
+    // 외부 트랜잭션이 있으면 사용, 없으면 새로 생성
+    $transaction = $external_transaction ?? new FileTransaction();
+    $is_own_transaction = ($external_transaction === null);
 
-    // Base64 이미지 저장
-    $image_parts = explode(',', $image_data);
-    $image_base64 = isset($image_parts[1]) ? $image_parts[1] : $image_data;
-    $decoded = base64_decode($image_base64);
+    try {
+        $timestamp = time();
+        $temp_image = UPLOAD_PATH . "/webcam_$timestamp.jpg";
+        $skeleton_image = OUTPUT_PATH . "/skeleton_$timestamp.png";
 
-    if ($decoded === false) {
-        return ['success' => false, 'error' => '이미지 디코딩 실패'];
-    }
+        // Base64 이미지 저장
+        $image_parts = explode(',', $image_data);
+        $image_base64 = isset($image_parts[1]) ? $image_parts[1] : $image_data;
+        $decoded = base64_decode($image_base64);
 
-    file_put_contents($temp_image, $decoded);
+        if ($decoded === false) {
+            throw new Exception('이미지 디코딩 실패');
+        }
 
-    // Python 스크립트 선택 (고도화 버전 또는 기본 버전)
-    $script = $advanced ?
-        SCRIPT_PATH . '\\camera_detect_advanced.py' :
-        SCRIPT_PATH . '\\camera_detect.py';
+        file_put_contents($temp_image, $decoded);
+        $transaction->addFile($temp_image);
 
-    // 고도화 버전 옵션
-    $options = json_encode([
-        'draw_hands' => $draw_hands,
-        'draw_face' => $draw_face,
-        'colorful' => false,
-        'min_quality' => 30.0
-    ]);
+        // Python 스크립트 선택 (고도화 버전 또는 기본 버전)
+        $script = $advanced ?
+            SCRIPT_PATH . '\\camera_detect_advanced.py' :
+            SCRIPT_PATH . '\\camera_detect.py';
 
-    if ($advanced) {
-        $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" \'' . addslashes($options) . '\' 2>&1';
-    } else {
-        $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
-    }
+        // 고도화 버전 옵션
+        $options = json_encode([
+            'draw_hands' => $draw_hands,
+            'draw_face' => $draw_face,
+            'colorful' => false,
+            'min_quality' => 30.0
+        ]);
 
-    exec($command, $output, $return_var);
+        if ($advanced) {
+            $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" \'' . addslashes($options) . '\' 2>&1';
+        } else {
+            $command = '"' . PYTHON_PATH . '" "' . $script . '" file "' . $temp_image . '" "' . $skeleton_image . '" 2>&1';
+        }
 
-    // Filter out non-JSON lines (like TensorFlow INFO messages)
-    $json_lines = [];
-    foreach ($output as $line) {
-        $trimmed = trim($line);
-        if (!empty($trimmed) && strlen($trimmed) > 0) {
-            $first_char = $trimmed[0];
-            if ($first_char === '{' || $first_char === '[') {
-                $json_lines[] = $line;
+        exec($command, $output, $return_var);
+
+        // skeleton_image가 생성되었다면 트랜잭션에 추가
+        if (file_exists($skeleton_image)) {
+            $transaction->addFile($skeleton_image);
+        }
+
+        // Filter out non-JSON lines (like TensorFlow INFO messages)
+        $json_lines = [];
+        foreach ($output as $line) {
+            $trimmed = trim($line);
+            if (!empty($trimmed) && strlen($trimmed) > 0) {
+                $first_char = $trimmed[0];
+                if ($first_char === '{' || $first_char === '[') {
+                    $json_lines[] = $line;
+                }
             }
         }
-    }
 
-    $output_str = implode("\n", $json_lines);
+        $output_str = implode("\n", $json_lines);
 
-    // JSON 파싱
-    $result = json_decode($output_str, true);
+        // JSON 파싱
+        $result = json_decode($output_str, true);
 
-    // JSON 파싱 실패 시 원본 출력 반환
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        return [
-            'success' => false,
-            'error' => "JSON 파싱 실패",
-            'raw_output' => $output_str,
-            'command' => $command
-        ];
-    }
+        // JSON 파싱 실패 시 원본 출력 반환
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception("JSON 파싱 실패: " . $output_str);
+        }
 
-    if ($result && isset($result['success']) && $result['success']) {
-        return [
-            'success' => true,
-            'skeleton_path' => $skeleton_image,
-            'skeleton_url' => '/ai_test_sec/outputs/' . basename($skeleton_image),
-            'message' => '포즈 감지 성공'
-        ];
-    } else {
-        $error = $result['error'] ?? $output_str;
-        return ['success' => false, 'error' => "포즈 감지 실패: $error"];
+        if ($result && isset($result['success']) && $result['success']) {
+            // 자체 트랜잭션일 때만 커밋
+            if ($is_own_transaction) {
+                $transaction->commit();
+            }
+            return [
+                'success' => true,
+                'skeleton_path' => $skeleton_image,
+                'skeleton_url' => '/ai_test_sec/outputs/' . basename($skeleton_image),
+                'message' => '포즈 감지 성공'
+            ];
+        } else {
+            $error = $result['error'] ?? $output_str;
+            throw new Exception("포즈 감지 실패: $error");
+        }
+    } catch (Exception $e) {
+        // 자체 트랜잭션일 때만 롤백하고 에러 반환
+        if ($is_own_transaction) {
+            $transaction->rollback();
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+        // 외부 트랜잭션을 위해 예외 다시 던지기
+        throw $e;
     }
 }
 
 /**
  * 이미지 생성
  */
-function generate_image($prompt, $skeleton_path = null, $mode = 'simple') {
-    $timestamp = time();
-    $output_image = OUTPUT_PATH . "/generated_$timestamp.png";
+function generate_image($prompt, $skeleton_path = null, $mode = 'simple', $external_transaction = null) {
+    // 외부 트랜잭션이 있으면 사용, 없으면 새로 생성
+    $transaction = $external_transaction ?? new FileTransaction();
+    $is_own_transaction = ($external_transaction === null);
 
-    $script = SCRIPT_PATH . '\\image_generate.py';
+    try {
+        $timestamp = time();
+        $output_image = OUTPUT_PATH . "/generated_$timestamp.png";
 
-    if ($mode === 'controlnet' && $skeleton_path) {
-        $command = '"' . PYTHON_PATH . '" "' . $script . '" controlnet "' . $prompt . '" "' . $skeleton_path . '" "' . $output_image . '" 2>&1';
-    } else {
-        $command = '"' . PYTHON_PATH . '" "' . $script . '" simple "' . $prompt . '" "' . $output_image . '" 2>&1';
-    }
+        $script = SCRIPT_PATH . '\\image_generate.py';
 
-    exec($command, $output, $return_var);
+        if ($mode === 'controlnet' && $skeleton_path) {
+            $command = '"' . PYTHON_PATH . '" "' . $script . '" controlnet "' . $prompt . '" "' . $skeleton_path . '" "' . $output_image . '" 2>&1';
+        } else {
+            $command = '"' . PYTHON_PATH . '" "' . $script . '" simple "' . $prompt . '" "' . $output_image . '" 2>&1';
+        }
 
-    // Filter out non-JSON lines (like TensorFlow INFO messages)
-    $json_lines = [];
-    foreach ($output as $line) {
-        $trimmed = trim($line);
-        if (!empty($trimmed) && strlen($trimmed) > 0) {
-            $first_char = $trimmed[0];
-            if ($first_char === '{' || $first_char === '[') {
-                $json_lines[] = $line;
+        exec($command, $output, $return_var);
+
+        // output_image가 생성되었다면 트랜잭션에 추가
+        if (file_exists($output_image)) {
+            $transaction->addFile($output_image);
+        }
+
+        // Filter out non-JSON lines (like TensorFlow INFO messages)
+        $json_lines = [];
+        foreach ($output as $line) {
+            $trimmed = trim($line);
+            if (!empty($trimmed) && strlen($trimmed) > 0) {
+                $first_char = $trimmed[0];
+                if ($first_char === '{' || $first_char === '[') {
+                    $json_lines[] = $line;
+                }
             }
         }
-    }
 
-    $output_str = implode("\n", $json_lines);
-    $result = json_decode($output_str, true);
+        $output_str = implode("\n", $json_lines);
+        $result = json_decode($output_str, true);
 
-    // JSON 파싱 실패 시 원본 출력 반환
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        return [
-            'success' => false,
-            'error' => "JSON 파싱 실패",
-            'raw_output' => $output_str,
-            'command' => $command
-        ];
-    }
+        // JSON 파싱 실패 시 원본 출력 반환
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception("JSON 파싱 실패: " . $output_str);
+        }
 
-    if ($result && isset($result['success']) && $result['success']) {
-        return [
-            'success' => true,
-            'image_path' => $output_image,
-            'image_url' => '/ai_test_sec/outputs/' . basename($output_image),
-            'message' => '이미지 생성 성공'
-        ];
-    } else {
-        $error = $result['error'] ?? $output_str;
-        return ['success' => false, 'error' => "이미지 생성 실패: $error"];
+        if ($result && isset($result['success']) && $result['success']) {
+            // 자체 트랜잭션일 때만 커밋
+            if ($is_own_transaction) {
+                $transaction->commit();
+            }
+            return [
+                'success' => true,
+                'image_path' => $output_image,
+                'image_url' => '/ai_test_sec/outputs/' . basename($output_image),
+                'message' => '이미지 생성 성공'
+            ];
+        } else {
+            $error = $result['error'] ?? $output_str;
+            throw new Exception("이미지 생성 실패: $error");
+        }
+    } catch (Exception $e) {
+        // 자체 트랜잭션일 때만 롤백하고 에러 반환
+        if ($is_own_transaction) {
+            $transaction->rollback();
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+        // 외부 트랜잭션을 위해 예외 다시 던지기
+        throw $e;
     }
 }
 
@@ -218,78 +293,108 @@ function generate_image($prompt, $skeleton_path = null, $mode = 'simple') {
  * 포즈 기반 이미지 생성 (통합)
  */
 function generate_pose_image($image_data, $prompt, $advanced = true, $draw_hands = true, $draw_face = true) {
-    // 1. 포즈 감지 (고도화 버전)
-    $pose_result = detect_pose($image_data, $advanced, $draw_hands, $draw_face);
+    $transaction = new FileTransaction();
 
-    if (!$pose_result['success']) {
-        return $pose_result;
+    try {
+        // 1. 포즈 감지 (고도화 버전) - 트랜잭션 전달
+        $pose_result = detect_pose($image_data, $advanced, $draw_hands, $draw_face, $transaction);
+
+        if (!$pose_result['success']) {
+            throw new Exception($pose_result['error']);
+        }
+
+        // 2. 이미지 생성 - 트랜잭션 전달
+        $gen_result = generate_image($prompt, $pose_result['skeleton_path'], 'controlnet', $transaction);
+
+        if (!$gen_result['success']) {
+            throw new Exception($gen_result['error']);
+        }
+
+        // 모든 작업 성공 시 트랜잭션 커밋
+        $transaction->commit();
+
+        // 결과 통합
+        return [
+            'success' => true,
+            'skeleton_url' => $pose_result['skeleton_url'],
+            'image_url' => $gen_result['image_url'],
+            'message' => '포즈 기반 이미지 생성 완료'
+        ];
+    } catch (Exception $e) {
+        $transaction->rollback(); // 에러 시 모든 파일 삭제
+        return ['success' => false, 'error' => $e->getMessage()];
     }
-
-    // 2. 이미지 생성
-    $gen_result = generate_image($prompt, $pose_result['skeleton_path'], 'controlnet');
-
-    if (!$gen_result['success']) {
-        return $gen_result;
-    }
-
-    // 결과 통합
-    return [
-        'success' => true,
-        'skeleton_url' => $pose_result['skeleton_url'],
-        'image_url' => $gen_result['image_url'],
-        'message' => '포즈 기반 이미지 생성 완료'
-    ];
 }
 
 /**
  * TTS (Text-to-Speech) - 텍스트를 음성으로 변환
  */
 function text_to_speech($text) {
-    error_log("text_to_speech 함수 시작");
-    $timestamp = time() . '_' . rand(1000, 9999);
-    $output_file = "tts_$timestamp.mp3";
+    $transaction = new FileTransaction();
 
-    $script = SCRIPT_PATH . '\\tts_service.py';
-    $command = '"' . PYTHON_PATH . '" "' . $script . '" "' . addslashes($text) . '" "' . $output_file . '" 2>&1';
+    try {
+        error_log("text_to_speech 함수 시작");
+        $timestamp = time() . '_' . rand(1000, 9999);
+        $output_file = "tts_$timestamp.mp3";
+        $full_output_path = OUTPUT_PATH . '\\' . $output_file;
 
-    error_log("TTS 명령어: " . $command);
+        $script = SCRIPT_PATH . '\\tts_service.py';
+        $command = '"' . PYTHON_PATH . '" "' . $script . '" "' . addslashes($text) . '" "' . $output_file . '" 2>&1';
 
-    $start_time = microtime(true);
-    exec($command, $output, $return_var);
-    $elapsed = microtime(true) - $start_time;
+        error_log("TTS 명령어: " . $command);
 
-    error_log("TTS 실행 완료 (소요시간: " . round($elapsed, 2) . "초)");
-    error_log("TTS Python 출력 라인 수: " . count($output));
-    error_log("TTS Python 전체 출력: " . implode("\n", $output));
+        $start_time = microtime(true);
+        exec($command, $output, $return_var);
+        $elapsed = microtime(true) - $start_time;
 
-    // JSON 라인만 필터링
-    $json_lines = [];
-    foreach ($output as $line) {
-        $trimmed = trim($line);
-        if (!empty($trimmed) && strlen($trimmed) > 0) {
-            $first_char = $trimmed[0];
-            if ($first_char === '{' || $first_char === '[') {
-                $json_lines[] = $line;
+        error_log("TTS 실행 완료 (소요시간: " . round($elapsed, 2) . "초)");
+        error_log("TTS Python 출력 라인 수: " . count($output));
+        error_log("TTS Python 전체 출력: " . implode("\n", $output));
+
+        // 생성된 파일 트랜잭션에 추가
+        if (file_exists($full_output_path)) {
+            $transaction->addFile($full_output_path);
+        }
+
+        // JSON 라인만 필터링
+        $json_lines = [];
+        foreach ($output as $line) {
+            $trimmed = trim($line);
+            if (!empty($trimmed) && strlen($trimmed) > 0) {
+                $first_char = $trimmed[0];
+                if ($first_char === '{' || $first_char === '[') {
+                    $json_lines[] = $line;
+                }
             }
         }
-    }
 
-    $output_str = implode("\n", $json_lines);
-    error_log("TTS JSON 문자열: " . $output_str);
-    $result = json_decode($output_str, true);
+        $output_str = implode("\n", $json_lines);
+        error_log("TTS JSON 문자열: " . $output_str);
+        $result = json_decode($output_str, true);
 
-    // JSON 파싱 실패 시
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        error_log("TTS JSON 파싱 실패: " . json_last_error_msg());
+        // JSON 파싱 실패 시
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("TTS JSON 파싱 실패: " . json_last_error_msg());
+            throw new Exception("TTS 서비스 오류: " . $output_str);
+        }
+
+        // 결과 검증
+        if (!isset($result['success']) || !$result['success']) {
+            $error = $result['error'] ?? 'Unknown error';
+            throw new Exception("TTS 실패: " . $error);
+        }
+
+        $transaction->commit(); // 성공 시 트랜잭션 커밋
+        error_log("TTS 성공, 결과 반환");
+        return $result;
+    } catch (Exception $e) {
+        $transaction->rollback(); // 에러 시 자동 롤백
+        error_log("TTS 에러: " . $e->getMessage());
         return [
             'success' => false,
-            'error' => "TTS 서비스 오류",
-            'raw_output' => $output_str
+            'error' => $e->getMessage()
         ];
     }
-
-    error_log("TTS 성공, 결과 반환");
-    return $result;
 }
 
 // API 라우팅
